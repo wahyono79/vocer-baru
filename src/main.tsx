@@ -1,5 +1,5 @@
 import { createRoot } from 'react-dom/client';
-import App from './App.tsx';
+import DebugApp from './App.debug.tsx';
 import './index.css';
 
 // Error handling for debugging
@@ -13,6 +13,8 @@ window.addEventListener('unhandledrejection', (e) => {
 
 console.log('🚀 Starting WiFi Voucher Management App...');
 
+// Service worker temporarily disabled for debugging
+/*
 // Initialize service worker for offline functionality
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
@@ -24,6 +26,7 @@ if ('serviceWorker' in navigator) {
     });
   });
 }
+*/
 
 // Handle install prompt
 window.addEventListener('beforeinstallprompt', (e) => {
@@ -44,7 +47,7 @@ try {
   const root = createRoot(rootElement);
   
   console.log('🎨 Rendering App component...');
-  root.render(<App />);
+  root.render(<DebugApp />);
   
   console.log('✅ App rendered successfully!');
 } catch (error) {
