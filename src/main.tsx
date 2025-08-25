@@ -2,6 +2,17 @@ import { createRoot } from 'react-dom/client';
 import App from './App.tsx';
 import './index.css';
 
+// Error handling for debugging
+window.addEventListener('error', (e) => {
+  console.error('❌ Global Error:', e.error);
+});
+
+window.addEventListener('unhandledrejection', (e) => {
+  console.error('❌ Unhandled Promise Rejection:', e.reason);
+});
+
+console.log('🚀 Starting WiFi Voucher Management App...');
+
 // Initialize service worker for offline functionality
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
@@ -23,4 +34,28 @@ window.addEventListener('beforeinstallprompt', (e) => {
   console.log('💾 Install prompt ready');
 });
 
-createRoot(document.getElementById('root')!).render(<App />);
+try {
+  const rootElement = document.getElementById('root');
+  if (!rootElement) {
+    throw new Error('Root element not found!');
+  }
+  
+  console.log('🎯 Creating React root...');
+  const root = createRoot(rootElement);
+  
+  console.log('🎨 Rendering App component...');
+  root.render(<App />);
+  
+  console.log('✅ App rendered successfully!');
+} catch (error) {
+  console.error('❌ Failed to initialize app:', error);
+  // Fallback: show error message
+  document.body.innerHTML = `
+    <div style="padding: 20px; font-family: Arial; text-align: center;">
+      <h1>⚠️ App Failed to Load</h1>
+      <p>Error: ${error}</p>
+      <p>Please check the console for more details.</p>
+      <button onclick="location.reload()">🔄 Reload Page</button>
+    </div>
+  `;
+}
