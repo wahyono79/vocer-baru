@@ -10,6 +10,7 @@ import SalesTable from '@/components/SalesTable';
 import EditSalesDialog from '@/components/EditSalesDialog';
 import ReportsTab from '@/components/ReportsTab';
 import HistoryTab from '@/components/HistoryTab';
+import AppHeader from '@/components/AppHeader';
 import { OfflineStatus } from '@/components/OfflineStatus';
 
 export default function Index() {
@@ -96,15 +97,8 @@ export default function Index() {
         {/* Offline Status */}
         <OfflineStatus className="max-w-2xl mx-auto" />
         
-        {/* Header */}
-        <div className="text-center space-y-2">
-          <h1 className="text-3xl font-bold text-gray-900">
-            Manajemen Penjualan Voucher WiFi
-          </h1>
-          <p className="text-gray-600">
-            Kelola penjualan voucher WiFi dengan mudah dan efisien
-          </p>
-        </div>
+        {/* Header with exit button */}
+        <AppHeader />
 
         {/* Quick Stats */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">

@@ -1,7 +1,7 @@
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { FileDown, Upload, Smartphone, Monitor } from 'lucide-react';
+import { FileDown, Upload, Smartphone, Monitor, Printer } from 'lucide-react';
 import { SalesData } from '@/types';
 import { mobilePDFExporter } from '@/utils/mobilePDFExporter';
 import { Capacitor } from '@capacitor/core';
@@ -30,9 +30,9 @@ export default function ReportsTab({ salesData, onDeposit }: ReportsTabProps) {
       const platform = Capacitor.getPlatform();
       
       toast.info(isNative ? 
-        `📱 Generating laporan untuk ${platform}...` : 
+        `📱 Membuat PDF untuk ${platform}...` : 
         '🖥️ Membuka preview laporan...', {
-        description: 'Silakan tunggu sebentar'
+        description: isNative ? 'Menggunakan generator PDF native' : 'Silakan tunggu sebentar'
       });
       
       await mobilePDFExporter.exportSalesReport(salesData, {
@@ -103,24 +103,27 @@ export default function ReportsTab({ salesData, onDeposit }: ReportsTabProps) {
       </div>
 
       {/* Action Buttons */}
-      <div className="flex space-x-4">
-        <Button onClick={generatePDF} className="flex items-center space-x-2">
+      <div className="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-4">
+        <Button 
+          onClick={generatePDF} 
+          className="flex items-center justify-center space-x-2 h-12 px-6 text-base font-medium bg-blue-600 hover:bg-blue-700 active:bg-blue-800 transition-colors"
+        >
           {Capacitor.isNativePlatform() ? (
-            <Smartphone className="h-4 w-4" />
+            <Printer className="h-5 w-5" />
           ) : (
-            <Monitor className="h-4 w-4" />
+            <Monitor className="h-5 w-5" />
           )}
           <span>
-            {Capacitor.isNativePlatform() ? 'Export Mobile' : 'Print / Save PDF'}
+            {Capacitor.isNativePlatform() ? 'Print PDF' : 'Print / Save PDF'}
           </span>
         </Button>
         <Button 
           onClick={handleDeposit} 
           variant="outline" 
-          className="flex items-center space-x-2"
+          className="flex items-center justify-center space-x-2 h-12 px-6 text-base font-medium border-2 hover:bg-gray-50 active:bg-gray-100 transition-colors"
           disabled={salesData.length === 0}
         >
-          <Upload className="h-4 w-4" />
+          <Upload className="h-5 w-5" />
           <span>Setor ({salesData.length} transaksi)</span>
         </Button>
       </div>

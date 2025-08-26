@@ -3,6 +3,15 @@ import { Capacitor } from '@capacitor/core';
 import { Filesystem, Directory, Encoding } from '@capacitor/filesystem';
 import { Share } from '@capacitor/share';
 import { toast } from 'sonner';
+import jsPDF from 'jspdf';
+import 'jspdf-autotable';
+
+// Extend jsPDF type to include autoTable
+declare module 'jspdf' {
+  interface jsPDF {
+    autoTable: (options: any) => jsPDF;
+  }
+}
 
 export interface PDFExportOptions {
   title?: string;
@@ -21,8 +30,392 @@ export class MobilePDFExporter {
   }
   
   /**
-   * Check if we're running in a native mobile environment
+   * Generate actual PDF using jsPDF for mobile downloads
    */
+  private generatePDFContent(salesData: SalesData[], options: PDFExportOptions = {}): jsPDF {
+    try {
+      console.log('Generating PDF content for', salesData.length, 'items');
+      
+      const formatCurrency = (amount: number) => {
+        try {
+          return `Rp ${amount.toLocaleString('id-ID')}`;
+        } catch (error) {
+          console.warn('Currency formatting error:', error);
+          return `Rp ${amount}`;
+        }
+      };
+      
+      const formatDate = (dateString: string) => {
+        try {
+          return new Date(dateString).toLocaleDateString('id-ID');
+        } catch (error) {
+          console.warn('Date formatting error:', error);
+          return dateString;
+        }
+      };
+      
+      const totalPenjualan = salesData.reduce((sum, item) => sum + (item.harga || 0), 0);
+      const totalFeePenjual = salesData.reduce((sum, item) => sum + (item.feePenjual || 0), 0);
+      const totalSetoranBersih = salesData.reduce((sum, item) => sum + (item.setoranBersih || 0), 0);
+      
+      console.log('PDF calculations completed:', { totalPenjualan, totalFeePenjual, totalSetoranBersih });
+      
+      // Create PDF document
+      const doc = new jsPDF({
+        orientation: options.orientation || 'portrait',
+        unit: 'mm',
+        format: 'a4'
+      });
+      
+      console.log('jsPDF document created');
+      
+      // Add title
+      doc.setFontSize(18);
+      doc.setTextColor(59, 130, 246); // Blue color
+      const title = options.title || 'Laporan Penjualan Voucher WiFi';
+      const titleWidth = doc.getTextWidth(title);
+      const pageWidth = doc.internal.pageSize.width;
+      doc.text(title, (pageWidth - titleWidth) / 2, 20);
+      
+      // Add generation date
+      doc.setFontSize(10);
+      doc.setTextColor(102, 102, 102); // Gray color
+      const dateText = `Tanggal Cetak: ${new Date().toLocaleDateString('id-ID', { 
+        weekday: 'long', 
+        year: 'numeric', 
+        month: 'long', 
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+      })}`;
+      doc.text(dateText, 20, 30);
+      
+      // Add summary section
+      doc.setFontSize(14);
+      doc.setTextColor(59, 130, 246);
+      doc.text('Ringkasan Penjualan', 20, 45);
+      
+      doc.setFontSize(10);
+      doc.setTextColor(0, 0, 0);
+      let yPos = 55;
+      
+      doc.text(`Total Transaksi: ${salesData.length} transaksi`, 20, yPos);
+      yPos += 7;
+      doc.text(`Total Penjualan: ${formatCurrency(totalPenjualan)}`, 20, yPos);
+      yPos += 7;
+      doc.text(`Total Fee Penjual: ${formatCurrency(totalFeePenjual)}`, 20, yPos);
+      yPos += 7;
+      doc.text(`Total Setoran Bersih: ${formatCurrency(totalSetoranBersih)}`, 20, yPos);
+      
+      // Add table
+      const tableColumns = [
+        'No',
+        'Tanggal',
+        'Nama Pelanggan',
+        'Paket',
+        'Harga',
+        'Kode Voucher',
+        'Fee Penjual',
+        'Setoran Bersih'
+      ];
+      
+      const tableData = salesData.map((item, index) => {
+        try {
+          return [
+            (index + 1).toString(),
+            formatDate(item.tanggal || ''),
+            item.namaPelanggan || '',
+            item.paket || '',
+            formatCurrency(item.harga || 0),
+            item.kodeVoucher || '',
+            formatCurrency(item.feePenjual || 0),
+            formatCurrency(item.setoranBersih || 0)
+          ];
+        } catch (error) {
+          console.warn('Error processing item:', item, error);
+          return [
+            (index + 1).toString(),
+            'Error',
+            'Error',
+            'Error',
+            'Error',
+            'Error',
+            'Error',
+            'Error'
+          ];
+        }
+      });
+      
+      console.log('Table data prepared, rows:', tableData.length);
+      
+      doc.autoTable({
+        head: [tableColumns],
+        body: tableData,
+        startY: yPos + 15,
+        theme: 'grid',
+        headStyles: {
+          fillColor: [59, 130, 246],
+          textColor: [255, 255, 255],
+          fontSize: 9,
+          fontStyle: 'bold'
+        },
+        bodyStyles: {
+          fontSize: 8,
+          cellPadding: 3
+        },
+        columnStyles: {
+          0: { halign: 'center', cellWidth: 10 },
+          1: { cellWidth: 25 },
+          2: { cellWidth: 35 },
+          3: { cellWidth: 20 },
+          4: { halign: 'right', cellWidth: 25 },
+          5: { cellWidth: 25 },
+          6: { halign: 'right', cellWidth: 25 },
+          7: { halign: 'right', cellWidth: 25 }
+        },
+        alternateRowStyles: {
+          fillColor: [249, 250, 251]
+        },
+        margin: { left: 20, right: 20 }
+      });
+      
+      console.log('AutoTable added successfully');
+      
+      // Add footer
+      const pageHeight = doc.internal.pageSize.height;
+      doc.setFontSize(8);
+      doc.setTextColor(102, 102, 102);
+      doc.text('Digenerate oleh Aplikasi Manajemen Penjualan Voucher WiFi', 20, pageHeight - 20);
+      doc.text(`© ${new Date().getFullYear()} MGX - Semua hak dilindungi`, 20, pageHeight - 15);
+      
+      console.log('PDF generation completed successfully');
+      return doc;
+      
+    } catch (error) {
+      console.error('Error generating PDF content:', error);
+      throw new Error(`PDF generation failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+  
+  /**
+   * Check file system permissions
+   */
+  private async checkPermissions(): Promise<boolean> {
+    try {
+      if (!this.isNative()) {
+        return true; // Web environment doesn't need permissions
+      }
+      
+      // Try to write a test file to check permissions
+      const testContent = 'test';
+      const testResult = await Filesystem.writeFile({
+        path: 'permission-test.txt',
+        data: testContent,
+        directory: Directory.Documents,
+        encoding: Encoding.UTF8,
+      });
+      
+      // Clean up test file
+      try {
+        await Filesystem.deleteFile({
+          path: 'permission-test.txt',
+          directory: Directory.Documents,
+        });
+      } catch (deleteError) {
+        console.warn('Could not delete test file:', deleteError);
+      }
+      
+      console.log('Permissions check passed:', testResult.uri);
+      return true;
+      
+    } catch (error) {
+      console.error('Permissions check failed:', error);
+      return false;
+    }
+  }
+  private async saveAsHTMLFallback(salesData: SalesData[], filename: string): Promise<void> {
+    try {
+      console.log('Using HTML fallback method');
+      
+      const htmlContent = this.generateHTMLContent(salesData, {
+        title: 'Laporan Penjualan Voucher WiFi',
+        filename: filename
+      });
+      
+      if (this.isNative()) {
+        try {
+          // Try to save to Documents directory first
+          const result = await Filesystem.writeFile({
+            path: `${filename}.html`,
+            data: htmlContent,
+            directory: Directory.Documents,
+            encoding: Encoding.UTF8,
+          });
+          
+          console.log('HTML file saved to:', result.uri);
+          
+          // Show success message
+          toast.success('✅ Laporan disimpan sebagai HTML', {
+            description: 'File tersimpan di Documents folder. Buka dengan browser untuk mencetak.'
+          });
+          
+          // Try to share the HTML file
+          if (Capacitor.getPlatform() === 'android') {
+            await this.shareFile(result.uri);
+          }
+          
+        } catch (fsError) {
+          console.warn('Documents directory failed, trying Downloads:', fsError);
+          
+          // Fallback to Downloads directory
+          try {
+            const result = await Filesystem.writeFile({
+              path: `${filename}.html`,
+              data: htmlContent,
+              directory: Directory.Cache, // Use Cache as fallback
+              encoding: Encoding.UTF8,
+            });
+            
+            console.log('HTML file saved to Cache:', result.uri);
+            
+            toast.success('✅ Laporan disimpan', {
+              description: 'File HTML tersimpan. Gunakan file manager untuk mengakses.'
+            });
+            
+            if (Capacitor.getPlatform() === 'android') {
+              await this.shareFile(result.uri);
+            }
+            
+          } catch (cacheError) {
+            console.error('Cache directory also failed:', cacheError);
+            // Final fallback: browser download
+            this.downloadHTMLFile(htmlContent, filename);
+            
+            toast.success('✅ Download dimulai', {
+              description: 'File HTML akan didownload melalui browser.'
+            });
+          }
+        }
+      } else {
+        // Web environment - direct download
+        this.downloadHTMLFile(htmlContent, filename);
+        
+        toast.success('✅ Download dimulai', {
+          description: 'File HTML akan didownload. Buka dengan browser untuk mencetak.'
+        });
+      }
+      
+    } catch (error) {
+      console.error('HTML fallback save error:', error);
+      
+      // Ultimate fallback: create a simple text report
+      const textReport = this.generateTextReport(salesData);
+      
+      if (this.isNative()) {
+        try {
+          const result = await Filesystem.writeFile({
+            path: `${filename}.txt`,
+            data: textReport,
+            directory: Directory.Cache,
+            encoding: Encoding.UTF8,
+          });
+          
+          toast.success('✅ Laporan disimpan sebagai teks', {
+            description: 'File teks tersimpan di Cache folder.'
+          });
+          
+          if (Capacitor.getPlatform() === 'android') {
+            await this.shareFile(result.uri);
+          }
+          
+        } catch {
+          // If everything fails, show error
+          toast.error('❌ Gagal menyimpan laporan', {
+            description: 'Periksa izin aplikasi dan ruang penyimpanan.'
+          });
+        }
+      } else {
+        // Web fallback: download as text
+        const blob = new Blob([textReport], { type: 'text/plain' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `${filename}.txt`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        
+        toast.success('✅ Download dimulai', {
+          description: 'Laporan teks akan didownload.'
+        });
+      }
+    }
+  }
+  /**
+   * Generate simple text report as ultimate fallback
+   */
+  private generateTextReport(salesData: SalesData[]): string {
+    const formatCurrency = (amount: number) => `Rp ${amount.toLocaleString('id-ID')}`;
+    const formatDate = (dateString: string) => {
+      try {
+        return new Date(dateString).toLocaleDateString('id-ID');
+      } catch {
+        return dateString;
+      }
+    };
+    
+    const totalPenjualan = salesData.reduce((sum, item) => sum + (item.harga || 0), 0);
+    const totalFeePenjual = salesData.reduce((sum, item) => sum + (item.feePenjual || 0), 0);
+    const totalSetoranBersih = salesData.reduce((sum, item) => sum + (item.setoranBersih || 0), 0);
+    
+    let report = '';
+    report += '==========================================\n';
+    report += '    LAPORAN PENJUALAN VOUCHER WIFI\n';
+    report += '==========================================\n\n';
+    
+    report += `Tanggal Cetak: ${new Date().toLocaleDateString('id-ID', { 
+      weekday: 'long', 
+      year: 'numeric', 
+      month: 'long', 
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    })}\n\n`;
+    
+    report += 'RINGKASAN PENJUALAN:\n';
+    report += '------------------------------------------\n';
+    report += `Total Transaksi: ${salesData.length} transaksi\n`;
+    report += `Total Penjualan: ${formatCurrency(totalPenjualan)}\n`;
+    report += `Total Fee Penjual: ${formatCurrency(totalFeePenjual)}\n`;
+    report += `Total Setoran Bersih: ${formatCurrency(totalSetoranBersih)}\n\n`;
+    
+    report += 'DETAIL TRANSAKSI:\n';
+    report += '------------------------------------------\n';
+    
+    if (salesData.length === 0) {
+      report += 'Belum ada data penjualan\n';
+    } else {
+      salesData.forEach((item, index) => {
+        report += `${index + 1}. ${formatDate(item.tanggal || '')}\n`;
+        report += `   Nama: ${item.namaPelanggan || 'N/A'}\n`;
+        report += `   Paket: ${item.paket || 'N/A'}\n`;
+        report += `   Harga: ${formatCurrency(item.harga || 0)}\n`;
+        report += `   Kode Voucher: ${item.kodeVoucher || 'N/A'}\n`;
+        report += `   Fee Penjual: ${formatCurrency(item.feePenjual || 0)}\n`;
+        report += `   Setoran Bersih: ${formatCurrency(item.setoranBersih || 0)}\n`;
+        report += '\n';
+      });
+    }
+    
+    report += '------------------------------------------\n';
+    report += 'Digenerate oleh Aplikasi Voucher WiFi\n';
+    report += `© ${new Date().getFullYear()} MGX\n`;
+    report += '==========================================';
+    
+    return report;
+  }
+
   private isNative(): boolean {
     return Capacitor.isNativePlatform();
   }
@@ -302,33 +695,204 @@ export class MobilePDFExporter {
    */
   public async exportSalesReport(salesData: SalesData[], options: PDFExportOptions = {}): Promise<void> {
     try {
+      console.log('Starting PDF export...', { 
+        isNative: this.isNative(), 
+        platform: Capacitor.getPlatform(),
+        dataLength: salesData.length 
+      });
+      
+      // Validate input data
+      if (!salesData || salesData.length === 0) {
+        toast.error('❌ Tidak ada data untuk diekspor', {
+          description: 'Pastikan ada data penjualan sebelum membuat laporan.'
+        });
+        return;
+      }
+      
+      // Check permissions for native platforms
+      if (this.isNative()) {
+        console.log('Checking permissions for native platform...');
+        const hasPermissions = await this.checkPermissions();
+        if (!hasPermissions) {
+          console.warn('Permissions check failed, but continuing with limited access...');
+          // Don't return here, instead try with limited access
+        }
+      }
+      
       const filename = options.filename || `laporan-voucher-${new Date().toISOString().split('T')[0]}`;
-      const htmlContent = this.generateHTMLContent(salesData, options);
       
       if (this.isNative()) {
-        // Native mobile environment - use Capacitor Filesystem
-        await this.saveToFileSystem(htmlContent, filename);
+        console.log('Using native PDF generation with jsPDF');
+        try {
+          // Native mobile environment - use jsPDF for actual PDF generation
+          const doc = this.generatePDFContent(salesData, options);
+          console.log('PDF document generated successfully');
+          
+          const pdfBlob = doc.output('blob');
+          console.log('PDF blob created, size:', pdfBlob.size, 'bytes');
+          
+          await this.savePDFToFileSystem(pdfBlob, filename);
+        } catch (pdfError) {
+          console.error('PDF generation failed, trying HTML fallback:', pdfError);
+          
+          // If PDF generation fails, try HTML fallback
+          toast.info('🗖️ Menggunakan format HTML', {
+            description: 'PDF gagal dibuat, menyimpan sebagai HTML'
+          });
+          
+          await this.saveAsHTMLFallback(salesData, filename);
+          return; // Exit early since fallback handles its own success message
+        }
       } else {
-        // Web environment - open in new window for printing
+        console.log('Using web HTML preview');
+        // Web environment - use HTML for printing (fallback)
+        const htmlContent = this.generateHTMLContent(salesData, options);
         await this.openPrintWindow(htmlContent);
       }
       
       toast.success('✅ Laporan berhasil digenerate!', {
         description: this.isNative() ? 
-          'File telah disimpan ke Downloads' : 
+          'File PDF telah disimpan ke Documents' : 
           'Silakan gunakan Ctrl+P untuk print atau simpan sebagai PDF'
       });
       
     } catch (error) {
       console.error('PDF Export Error:', error);
-      toast.error('❌ Gagal membuat laporan', {
-        description: 'Terjadi kesalahan saat membuat PDF. Silakan coba lagi.'
-      });
+      
+      // More detailed error handling
+      if (error instanceof Error) {
+        if (error.message.includes('jsPDF')) {
+          toast.error('❌ Gagal membuat PDF', {
+            description: 'Error pada generator PDF. Silakan coba lagi.'
+          });
+        } else if (error.message.includes('Memory') || error.message.includes('memory')) {
+          toast.error('❌ Memori tidak cukup', {
+            description: 'Data terlalu besar untuk diproses. Coba dengan data yang lebih kecil.'
+          });
+        } else {
+          toast.error('❌ Gagal membuat laporan', {
+            description: `Error: ${error.message}. Silakan coba lagi.`
+          });
+        }
+      } else {
+        toast.error('❌ Gagal membuat laporan', {
+          description: 'Terjadi kesalahan tidak dikenal. Silakan coba lagi.'
+        });
+      }
     }
   }
   
   /**
-   * Save HTML content to filesystem for native apps
+   * Save PDF blob to filesystem for native apps
+   */
+  private async savePDFToFileSystem(pdfBlob: Blob, filename: string): Promise<void> {
+    try {
+      console.log('Starting PDF save process...', { filename, blobSize: pdfBlob.size });
+      
+      // Convert blob to base64 for Capacitor
+      const arrayBuffer = await pdfBlob.arrayBuffer();
+      const uint8Array = new Uint8Array(arrayBuffer);
+      let binary = '';
+      for (let i = 0; i < uint8Array.byteLength; i++) {
+        binary += String.fromCharCode(uint8Array[i]);
+      }
+      const base64Data = btoa(binary);
+      
+      console.log('Base64 conversion completed, length:', base64Data.length);
+      
+      try {
+        // Try Documents directory first
+        const result = await Filesystem.writeFile({
+          path: `${filename}.pdf`,
+          data: base64Data,
+          directory: Directory.Documents,
+        });
+        
+        console.log('PDF file saved successfully to Documents:', result.uri);
+        
+        // Show success message
+        toast.success('✅ PDF berhasil disimpan!', {
+          description: 'File PDF tersimpan di Documents folder.'
+        });
+        
+        // Try to share the PDF file
+        if (Capacitor.getPlatform() === 'android') {
+          await this.shareFile(result.uri);
+        }
+        
+      } catch (documentsError) {
+        console.warn('Documents directory failed, trying Cache:', documentsError);
+        
+        // Fallback to Cache directory
+        try {
+          const result = await Filesystem.writeFile({
+            path: `${filename}.pdf`,
+            data: base64Data,
+            directory: Directory.Cache,
+          });
+          
+          console.log('PDF file saved to Cache:', result.uri);
+          
+          toast.success('✅ PDF disimpan di Cache!', {
+            description: 'File PDF tersimpan. Gunakan file manager untuk mengakses.'
+          });
+          
+          if (Capacitor.getPlatform() === 'android') {
+            await this.shareFile(result.uri);
+          }
+          
+        } catch (cacheError) {
+          console.error('Cache directory also failed:', cacheError);
+          throw cacheError; // Re-throw to trigger HTML fallback
+        }
+      }
+      
+    } catch (error) {
+      console.error('PDF filesystem save error:', error);
+      
+      // More specific error handling
+      if (error instanceof Error) {
+        if (error.message.includes('Permission denied') || error.message.includes('EACCES')) {
+          console.log('Permission denied, trying fallback methods');
+        } else if (error.message.includes('No space') || error.message.includes('ENOSPC')) {
+          toast.error('❌ Ruang penyimpanan penuh', {
+            description: 'Tidak ada cukup ruang untuk menyimpan file PDF.'
+          });
+          return; // Don't try fallback if no space
+        }
+      }
+      
+      // Fallback to browser download if available
+      if (!this.isNative()) {
+        console.log('Attempting browser PDF download...');
+        this.downloadPDFFile(pdfBlob, filename);
+        
+        toast.success('✅ Download PDF dimulai!', {
+          description: 'File PDF akan didownload melalui browser.'
+        });
+      } else {
+        // Re-throw error to trigger HTML fallback
+        throw error;
+      }
+    }
+  }
+  
+  /**
+   * Download PDF file directly in browser
+   */
+  private downloadPDFFile(pdfBlob: Blob, filename: string): void {
+    const url = URL.createObjectURL(pdfBlob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${filename}.pdf`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
+  
+  /**
+   * Save HTML content to filesystem for native apps (fallback method)
    */
   private async saveToFileSystem(htmlContent: string, filename: string): Promise<void> {
     try {
