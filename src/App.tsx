@@ -14,13 +14,13 @@ import NotFound from './pages/NotFound';
 const queryClient = new QueryClient();
 
 const App = () => {
-  const [showSplash, setShowSplash] = useState(true);
-  const [appReady, setAppReady] = useState(false);
+  const [showSplash, setShowSplash] = useState(Capacitor.isNativePlatform());
+  const [appReady, setAppReady] = useState(!Capacitor.isNativePlatform()); // Web is ready immediately
 
-  // Setup Android back button handler with double-press to exit
+  // Setup Android back button handler with double-press to exit (only on native)
   useAndroidBackButton({
     exitOnBackButton: true,
-    confirmExit: false, // Disable confirmation since we use double-press
+    confirmExit: false,
     doubleBackToExit: true,
     doubleBackTimeout: 2000,
     exitMessage: 'Keluar dari Aplikasi Voucher WiFi?'
@@ -31,13 +31,15 @@ const App = () => {
     let resumeListener: any;
 
     const setupAppLifecycle = async () => {
+      // Only setup complex lifecycle for native platforms
       if (Capacitor.isNativePlatform()) {
-        console.log('Setting up app lifecycle listeners');
+        console.log('Setting up app lifecycle listeners for native platform');
 
         // Check if app is stuck and reset if needed
         if (appStateManager.isAppStuck()) {
           console.warn('App appears to be stuck, forcing reset...');
           await appStateManager.forceReset();
+          setAppReady(true);
           return;
         }
 
@@ -50,15 +52,12 @@ const App = () => {
           
           if (state.isActive) {
             console.log('App resumed - resetting to fresh state');
-            // Update activity
             appStateManager.updateActivity();
             
-            // Reset app to fresh state when resumed
             setAppReady(false);
             setShowSplash(true);
             appStateManager.markSplashStart();
             
-            // Allow splash screen to complete normally
             setTimeout(() => {
               setAppReady(true);
             }, 100);
@@ -71,10 +70,8 @@ const App = () => {
         // Listen for app resume events
         resumeListener = await CapacitorApp.addListener('resume', () => {
           console.log('App resume event - ensuring fresh start');
-          // Update activity
           appStateManager.updateActivity();
           
-          // Force fresh start
           setAppReady(false);
           setShowSplash(true);
           appStateManager.markSplashStart();
@@ -83,14 +80,24 @@ const App = () => {
             setAppReady(true);
           }, 100);
         });
+
+        // Mark app as ready for native platforms
+        appStateManager.updateActivity();
+        setAppReady(true);
+      } else {
+        // For web, just ensure we're ready immediately
+        console.log('Web platform detected - skipping splash screen');
+        setShowSplash(false);
+        setAppReady(true);
       }
-      
-      // Mark app as ready for initial load
-      appStateManager.updateActivity();
-      setAppReady(true);
     };
 
-    setupAppLifecycle();
+    setupAppLifecycle().catch(error => {
+      console.error('Failed to setup app lifecycle:', error);
+      // Fallback: ensure app is ready even if setup fails
+      setAppReady(true);
+      setShowSplash(false);
+    });
 
     return () => {
       if (appStateListener) {
@@ -106,16 +113,31 @@ const App = () => {
 
   const handleSplashComplete = () => {
     console.log('Splash screen completed');
-    appStateManager.clearSplashMarker();
-    appStateManager.updateActivity();
+    if (Capacitor.isNativePlatform()) {
+      appStateManager.clearSplashMarker();
+      appStateManager.updateActivity();
+    }
     setShowSplash(false);
   };
 
-  // Don't render anything until app is ready
+  // Fallback timeout to ensure app loads even if there are issues
+  useEffect(() => {
+    const fallbackTimer = setTimeout(() => {
+      if (!appReady) {
+        console.warn('App taking too long to initialize, forcing ready state');
+        setAppReady(true);
+        setShowSplash(false);
+      }
+    }, 5000); // 5 second fallback
+
+    return () => clearTimeout(fallbackTimer);
+  }, [appReady]);
+
+  // Don't render anything until app is ready (but provide loading fallback)
   if (!appReady) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-blue-600">
-        <div className="text-white text-lg">Loading...</div>
+        <div className="text-white text-lg animate-pulse">Loading WiFi Voucher App...</div>
       </div>
     );
   }
@@ -124,7 +146,7 @@ const App = () => {
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
         <Toaster />
-        {showSplash ? (
+        {showSplash && Capacitor.isNativePlatform() ? (
           <SplashScreen onComplete={handleSplashComplete} duration={3000} />
         ) : (
           <BrowserRouter>

@@ -2,19 +2,23 @@ import { createRoot } from 'react-dom/client';
 import App from './App.tsx';
 import './index.css';
 
-// Initialize service worker for offline functionality
+// Render the app first
+createRoot(document.getElementById('root')!).render(<App />);
+
+// Initialize service worker after app is loaded (non-blocking)
 if ('serviceWorker' in navigator) {
-  window.addEventListener('load', () => {
-    // Import service worker manager to initialize it
+  // Defer service worker initialization to avoid blocking app startup
+  setTimeout(() => {
     import('./lib/serviceWorker').then(({ serviceWorkerManager }) => {
-      console.log('🔧 Service Worker Manager initialized');
+      console.log('🔧 Service Worker Manager initialized (deferred)');
     }).catch(error => {
-      console.error('❌ Failed to initialize Service Worker:', error);
+      console.warn('⚠️ Service Worker initialization failed:', error);
+      // Don't block app if SW fails
     });
-  });
+  }, 2000); // Initialize after 2 seconds
 }
 
-// Handle install prompt
+// Handle install prompt (non-blocking)
 window.addEventListener('beforeinstallprompt', (e) => {
   // Prevent the mini-infobar from appearing on mobile
   e.preventDefault();
@@ -22,5 +26,3 @@ window.addEventListener('beforeinstallprompt', (e) => {
   (window as any).deferredPrompt = e;
   console.log('💾 Install prompt ready');
 });
-
-createRoot(document.getElementById('root')!).render(<App />);
